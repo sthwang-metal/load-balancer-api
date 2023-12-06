@@ -154,7 +154,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "number", Type: field.TypeInt},
-		{Name: "name", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Nullable: true},
 		{Name: "load_balancer_id", Type: field.TypeString},
 	}
 	// PortsTable holds the schema information for the "ports" table.

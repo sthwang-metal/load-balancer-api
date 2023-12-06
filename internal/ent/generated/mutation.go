@@ -2633,9 +2633,22 @@ func (m *PortMutation) OldName(ctx context.Context) (v string, err error) {
 	return oldValue.Name, nil
 }
 
+// ClearName clears the value of the "name" field.
+func (m *PortMutation) ClearName() {
+	m.name = nil
+	m.clearedFields[port.FieldName] = struct{}{}
+}
+
+// NameCleared returns if the "name" field was cleared in this mutation.
+func (m *PortMutation) NameCleared() bool {
+	_, ok := m.clearedFields[port.FieldName]
+	return ok
+}
+
 // ResetName resets all changes to the "name" field.
 func (m *PortMutation) ResetName() {
 	m.name = nil
+	delete(m.clearedFields, port.FieldName)
 }
 
 // SetLoadBalancerID sets the "load_balancer_id" field.
@@ -2930,7 +2943,11 @@ func (m *PortMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *PortMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(port.FieldName) {
+		fields = append(fields, port.FieldName)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -2943,6 +2960,11 @@ func (m *PortMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *PortMutation) ClearField(name string) error {
+	switch name {
+	case port.FieldName:
+		m.ClearName()
+		return nil
+	}
 	return fmt.Errorf("unknown Port nullable field %s", name)
 }
 
