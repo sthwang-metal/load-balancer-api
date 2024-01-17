@@ -5,24 +5,31 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"go.infratographer.com/permissions-api/pkg/permissions"
+	"go.infratographer.com/permissions-api/pkg/permissions/mockpermissions"
 	"go.infratographer.com/x/gidx"
 
 	ent "go.infratographer.com/load-balancer-api/internal/ent/generated"
 	"go.infratographer.com/load-balancer-api/internal/graphclient"
+	"go.infratographer.com/load-balancer-api/internal/testutils"
 )
 
 func TestQueryPoolOrigin(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	pool1 := (&PoolBuilder{}).MustNew(ctx)
-	origin1 := (&OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
-	origin2 := (&OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
+	pool1 := (&testutils.PoolBuilder{}).MustNew(ctx)
+	origin1 := (&testutils.OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
+	origin2 := (&testutils.OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName       string
@@ -76,11 +83,15 @@ func TestQueryPoolOrigin(t *testing.T) {
 
 func TestMutate_OriginCreate(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	pool1 := (&PoolBuilder{}).MustNew(ctx)
+	pool1 := (&testutils.PoolBuilder{}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName       string
@@ -141,6 +152,54 @@ func TestMutate_OriginCreate(t *testing.T) {
 				Active:     false,
 			},
 		},
+		{
+			TestName: "invalid target ip",
+			Input: graphclient.CreateLoadBalancerOriginInput{
+				Name:       "original",
+				Target:     "not a valid target ip",
+				PortNumber: 22,
+				PoolID:     pool1.ID,
+				Active:     newBool(false),
+			},
+			errorMsg: "invalid ip address",
+		},
+		{
+			TestName: "Default weight to 100",
+			Input: graphclient.CreateLoadBalancerOriginInput{
+				Name:       "weightless",
+				Target:     "1.2.3.4",
+				PortNumber: 22,
+				PoolID:     pool1.ID,
+				Active:     newBool(false),
+			},
+			ExpectedOrigin: ent.LoadBalancerOrigin{
+				Name:       "weightless",
+				Target:     "1.2.3.4",
+				PortNumber: 22,
+				PoolID:     pool1.ID,
+				Weight:     100,
+				Active:     false,
+			},
+		},
+		{
+			TestName: "Set specific weight",
+			Input: graphclient.CreateLoadBalancerOriginInput{
+				Name:       "weighted",
+				Target:     "1.2.3.4",
+				PortNumber: 22,
+				PoolID:     pool1.ID,
+				Active:     newBool(false),
+				Weight:     newInt64(50),
+			},
+			ExpectedOrigin: ent.LoadBalancerOrigin{
+				Name:       "weighted",
+				Target:     "1.2.3.4",
+				PortNumber: 22,
+				PoolID:     pool1.ID,
+				Weight:     50,
+				Active:     false,
+			},
+		},
 	}
 
 	for _, tt := range testCases {
@@ -175,12 +234,16 @@ func TestMutate_OriginCreate(t *testing.T) {
 
 func TestMutate_OriginUpdate(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	pool1 := (&PoolBuilder{}).MustNew(ctx)
-	origin1 := (&OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
+	pool1 := (&testutils.PoolBuilder{}).MustNew(ctx)
+	origin1 := (&testutils.OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName       string
@@ -261,12 +324,17 @@ func TestMutate_OriginUpdate(t *testing.T) {
 
 func TestMutate_OriginDelete(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	perms.On("DeleteAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	pool1 := (&PoolBuilder{}).MustNew(ctx)
-	origin1 := (&OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
+	pool1 := (&testutils.PoolBuilder{}).MustNew(ctx)
+	origin1 := (&testutils.OriginBuilder{PoolID: pool1.ID}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName string

@@ -6,22 +6,33 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"go.infratographer.com/permissions-api/pkg/permissions"
+	"go.infratographer.com/permissions-api/pkg/permissions/mockpermissions"
 	"go.infratographer.com/x/gidx"
 
+	"go.infratographer.com/load-balancer-api/internal/config"
 	"go.infratographer.com/load-balancer-api/internal/graphclient"
+	"go.infratographer.com/load-balancer-api/internal/testutils"
 )
 
 func TestCreate_LoadbalancerPort(t *testing.T) {
+	config.AppConfig.RestrictedPorts = []int{1234}
+
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb := (&LoadBalancerBuilder{}).MustNew(ctx)
-	_ = (&PortBuilder{Name: "port80", LoadBalancerID: lb.ID, Number: 80}).MustNew(ctx)
+	lb := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
+	poolBad := (&testutils.PoolBuilder{}).MustNew(ctx)
+	_ = (&testutils.PortBuilder{Name: "port80", LoadBalancerID: lb.ID, Number: 80}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName string
@@ -32,37 +43,52 @@ func TestCreate_LoadbalancerPort(t *testing.T) {
 		{
 			TestName: "creates loadbalancer port",
 			Input: graphclient.CreateLoadBalancerPortInput{
-				Name:           "lb-port",
+				Name:           newString("lb-port"),
 				LoadBalancerID: lb.ID,
 				Number:         22,
 			},
 			Expected: &graphclient.LoadBalancerPort{
-				Name:   "lb-port",
+				Name:   newString("lb-port"),
 				Number: 22,
 			},
 		},
 		{
-			TestName: "fails to create loadbalancer port with empty name",
+			TestName: "succeeds in creating loadbalancer port with empty name",
 			Input: graphclient.CreateLoadBalancerPortInput{
-				Name:           "",
+				Name:           newString(""),
 				LoadBalancerID: lb.ID,
-				Number:         22,
+				Number:         23,
 			},
-			errorMsg: "value is less than the required length",
+			Expected: &graphclient.LoadBalancerPort{
+				Name:   newString(""),
+				Number: 23,
+			},
+		},
+		{
+			TestName: "succeeds in creating loadbalancer port with nil name",
+			Input: graphclient.CreateLoadBalancerPortInput{
+				Name:           nil,
+				LoadBalancerID: lb.ID,
+				Number:         24,
+			},
+			Expected: &graphclient.LoadBalancerPort{
+				Name:   newString(""),
+				Number: 24,
+			},
 		},
 		{
 			TestName: "fails to create loadbalancer port with empty loadbalancer id",
 			Input: graphclient.CreateLoadBalancerPortInput{
-				Name:           "lb-port",
+				Name:           newString("lb-port"),
 				LoadBalancerID: "",
 				Number:         22,
 			},
-			errorMsg: "value is less than the required length",
+			errorMsg: "load_balancer not found",
 		},
 		{
 			TestName: "fails to create loadbalancer port with number < min",
 			Input: graphclient.CreateLoadBalancerPortInput{
-				Name:           "lb-port",
+				Name:           newString("lb-port"),
 				LoadBalancerID: lb.ID,
 				Number:         0,
 			},
@@ -71,7 +97,7 @@ func TestCreate_LoadbalancerPort(t *testing.T) {
 		{
 			TestName: "fails to create loadbalancer port with number > max",
 			Input: graphclient.CreateLoadBalancerPortInput{
-				Name:           "lb-port",
+				Name:           newString("lb-port"),
 				LoadBalancerID: lb.ID,
 				Number:         65536,
 			},
@@ -80,11 +106,40 @@ func TestCreate_LoadbalancerPort(t *testing.T) {
 		{
 			TestName: "fails to create loadbalancer port with duplicate port number",
 			Input: graphclient.CreateLoadBalancerPortInput{
-				Name:           "lb-port",
+				Name:           newString("lb-port"),
 				LoadBalancerID: lb.ID,
 				Number:         80,
 			},
 			errorMsg: "port number already in use",
+		},
+		{
+			TestName: "fails to create loadbalancer port with restricted port number",
+			Input: graphclient.CreateLoadBalancerPortInput{
+				Name:           newString("lb-port"),
+				LoadBalancerID: lb.ID,
+				Number:         1234,
+			},
+			errorMsg: "port number restricted",
+		},
+		{
+			TestName: "fails to create loadbalancer port with invalid pool id",
+			Input: graphclient.CreateLoadBalancerPortInput{
+				Name:           newString("lb-port"),
+				LoadBalancerID: lb.ID,
+				Number:         1234,
+				PoolIDs:        []gidx.PrefixedID{"not-a-valid-pool-id"},
+			},
+			errorMsg: "invalid id",
+		},
+		{
+			TestName: "fails to create loadbalancer port with pool with conflicting OwnerID",
+			Input: graphclient.CreateLoadBalancerPortInput{
+				Name:           newString("lb-port"),
+				LoadBalancerID: lb.ID,
+				Number:         1234,
+				PoolIDs:        []gidx.PrefixedID{poolBad.ID},
+			},
+			errorMsg: "one or more pools not found",
 		},
 	}
 
@@ -118,57 +173,81 @@ func TestCreate_LoadbalancerPort(t *testing.T) {
 }
 
 func TestUpdate_LoadbalancerPort(t *testing.T) {
+	config.AppConfig.RestrictedPorts = []int{1234}
+
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb := (&LoadBalancerBuilder{}).MustNew(ctx)
-	port := (&PortBuilder{Name: "port80", LoadBalancerID: lb.ID, Number: 80}).MustNew(ctx)
-	_ = (&PortBuilder{Name: "dupeport8080", LoadBalancerID: lb.ID, Number: 8080}).MustNew(ctx)
+	lb := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
+	port := (&testutils.PortBuilder{Name: "port80", LoadBalancerID: lb.ID, Number: 80}).MustNew(ctx)
+	poolBad := (&testutils.PoolBuilder{}).MustNew(ctx)
+	_ = (&testutils.PortBuilder{Name: "dupeport8080", LoadBalancerID: lb.ID, Number: 8080}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName string
 		Input    graphclient.UpdateLoadBalancerPortInput
+		ID       gidx.PrefixedID
 		Expected *graphclient.LoadBalancerPort
 		errorMsg string
 	}{
 		{
 			TestName: "fails to update loadbalancer port number to duplicate of another port",
+			ID:       port.ID,
 			Input: graphclient.UpdateLoadBalancerPortInput{
 				Number: newInt64(8080),
 			},
 			errorMsg: "port number already in use",
 		},
 		{
+			TestName: "fails to update loadbalancer port number to restricted port",
+			ID:       port.ID,
+			Input: graphclient.UpdateLoadBalancerPortInput{
+				Number: newInt64(1234),
+			},
+			errorMsg: "port number restricted",
+		},
+		{
 			TestName: "updates loadbalancer port name",
+			ID:       port.ID,
 			Input: graphclient.UpdateLoadBalancerPortInput{
 				Name: newString("lb-port"),
 			},
 			Expected: &graphclient.LoadBalancerPort{
-				Name:   "lb-port",
+				Name:   newString("lb-port"),
 				Number: 80,
 			},
 		},
 		{
 			TestName: "updates loadbalancer port number",
+			ID:       port.ID,
 			Input: graphclient.UpdateLoadBalancerPortInput{
 				Number: newInt64(22),
 			},
 			Expected: &graphclient.LoadBalancerPort{
-				Name:   "lb-port",
+				Name:   newString("lb-port"),
 				Number: 22,
 			},
 		},
 		{
-			TestName: "fails to update loadbalancer port name to empty",
+			TestName: "succeeds in updating loadbalancer port name to empty",
+			ID:       port.ID,
 			Input: graphclient.UpdateLoadBalancerPortInput{
 				Name: newString(""),
 			},
-			errorMsg: "value is less than the required length",
+			Expected: &graphclient.LoadBalancerPort{
+				Name:   newString(""),
+				Number: 22,
+			},
 		},
 		{
 			TestName: "fails to update loadbalancer port number < min",
+			ID:       port.ID,
 			Input: graphclient.UpdateLoadBalancerPortInput{
 				Number: newInt64(0),
 			},
@@ -176,16 +255,37 @@ func TestUpdate_LoadbalancerPort(t *testing.T) {
 		},
 		{
 			TestName: "fails to update loadbalancer port number > max",
+			ID:       port.ID,
 			Input: graphclient.UpdateLoadBalancerPortInput{
 				Number: newInt64(65536),
 			},
 			errorMsg: "value out of range",
 		},
+		{
+			TestName: "fails to update port that does not exist",
+			ID:       gidx.PrefixedID("loadprt-doesnotexist"),
+			Input:    graphclient.UpdateLoadBalancerPortInput{},
+			errorMsg: "not found",
+		},
+		{
+			TestName: "fails to update port with invalid gidx",
+			ID:       gidx.PrefixedID("not a valid gidx"),
+			Input:    graphclient.UpdateLoadBalancerPortInput{},
+			errorMsg: "invalid id",
+		},
+		{
+			TestName: "fails to update loadbalancer port with pool with conflicting OwnerID",
+			ID:       port.ID,
+			Input: graphclient.UpdateLoadBalancerPortInput{
+				AddPoolIDs: []gidx.PrefixedID{poolBad.ID},
+			},
+			errorMsg: "one or more pools not found",
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.TestName, func(t *testing.T) {
-			resp, err := graphTestClient().LoadBalancerPortUpdate(ctx, port.ID, tt.Input)
+			resp, err := graphTestClient().LoadBalancerPortUpdate(ctx, tt.ID, tt.Input)
 
 			if tt.errorMsg != "" {
 				require.Error(t, err)
@@ -210,12 +310,17 @@ func TestUpdate_LoadbalancerPort(t *testing.T) {
 
 func TestDelete_LoadbalancerPort(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	perms.On("DeleteAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb := (&LoadBalancerBuilder{}).MustNew(ctx)
-	port := (&PortBuilder{Name: "port80", LoadBalancerID: lb.ID, Number: 80}).MustNew(ctx)
+	lb := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
+	port := (&testutils.PortBuilder{Name: "port80", LoadBalancerID: lb.ID, Number: 80}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName string
@@ -235,6 +340,11 @@ func TestDelete_LoadbalancerPort(t *testing.T) {
 			TestName: "fails to delete empty loadbalancer port ID",
 			Input:    gidx.PrefixedID(""),
 			errorMsg: "port not found",
+		},
+		{
+			TestName: "fails to delete with invalid gidx port ID",
+			Input:    gidx.PrefixedID("not-a-valid-gidx"),
+			errorMsg: "invalid id",
 		},
 	}
 
@@ -265,12 +375,17 @@ func TestDelete_LoadbalancerPort(t *testing.T) {
 
 func TestFullLoadBalancerPortLifecycle(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	perms.On("DeleteAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb := (&LoadBalancerBuilder{}).MustNew(ctx)
-	name := gofakeit.DomainName()
+	lb := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
+	name := newString(gofakeit.DomainName())
 
 	createdPortResp, err := graphTestClient().LoadBalancerPortCreate(ctx, graphclient.CreateLoadBalancerPortInput{
 		Name:           name,

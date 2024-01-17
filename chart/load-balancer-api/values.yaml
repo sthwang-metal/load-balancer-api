@@ -1,7 +1,7 @@
 image:
   repository: ghcr.io/infratographer/load-balancer-api
   pullPolicy: IfNotPresent
-  tag: "v0.1.0"
+  tag: "v0.1.3"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -34,6 +34,7 @@ api:
   listenPort: 7608
   extraLabels: {}
   extraAnnotations: {}
+  extraEnvFrom: {}
   extraEnvVars: []
   #- value: "postgresql://user@my-db-server:26257/load_balancer_api"
   #  name: LOADBALANCERAPI_CRDB_URI
@@ -65,17 +66,30 @@ api:
     certSecret: ""
   migrateOnInit: false
 
+  metadata:
+    # statusNamespaceID is the namespace ID to use for status updates
+    statusNamespaceID: ""
+
   oidc:
     enabled: false
     audience: ""
     issuer: ""
     jwks:
       remoteTimeout: 1m
+    client:
+      issuer: ""
 
   permissions:
     url: ""
+    # ignoreNoResponders whether or not to ignore errors when no AuthRelationship request-reply responders are available
+    ignoreNoResponders: false
 
   shutdownGracePeriod: 5s
+
+  supergraph:
+    url: ""
+    timeout: 5s
+
   trustedProxies: []
   # - "1.2.3.4"
   # - "1.2.3.4/32"

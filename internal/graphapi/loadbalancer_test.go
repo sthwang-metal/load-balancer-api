@@ -6,22 +6,30 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.infratographer.com/permissions-api/pkg/permissions"
+	"go.infratographer.com/permissions-api/pkg/permissions/mockpermissions"
 	"go.infratographer.com/x/gidx"
 
+	"go.infratographer.com/load-balancer-api/internal/config"
 	ent "go.infratographer.com/load-balancer-api/internal/ent/generated"
 	"go.infratographer.com/load-balancer-api/internal/graphclient"
+	"go.infratographer.com/load-balancer-api/internal/testutils"
 )
 
 func TestQuery_loadBalancer(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb1 := (&LoadBalancerBuilder{}).MustNew(ctx)
-	lb2 := (&LoadBalancerBuilder{}).MustNew(ctx)
+	lb1 := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
+	lb2 := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName   string
@@ -43,6 +51,11 @@ func TestQuery_loadBalancer(t *testing.T) {
 			TestName: "No load balancer found with ID",
 			QueryID:  gidx.MustNewID("testing"),
 			errorMsg: "load_balancer not found",
+		},
+		{
+			TestName: "invalid gidx format",
+			QueryID:  "test-invalid-id",
+			errorMsg: "invalid id",
 		},
 	}
 
@@ -71,11 +84,15 @@ func TestQuery_loadBalancer(t *testing.T) {
 
 func TestCreate_loadBalancer(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	prov := (&ProviderBuilder{}).MustNew(ctx)
+	prov := (&testutils.ProviderBuilder{}).MustNew(ctx)
 	ownerID := gidx.MustNewID(ownerPrefix)
 	locationID := gidx.MustNewID(locationPrefix)
 	name := gofakeit.DomainName()
@@ -142,24 +159,88 @@ func TestCreate_loadBalancer(t *testing.T) {
 	}
 }
 
-func TestUpdate_loadBalancer(t *testing.T) {
+func TestCreate_loadBalancer_limit(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb := (&LoadBalancerBuilder{}).MustNew(ctx)
+	prov := (&testutils.ProviderBuilder{}).MustNew(ctx)
+	locationID := gidx.MustNewID(locationPrefix)
+	name := gofakeit.DomainName()
+
+	config.AppConfig.LoadBalancerLimit = 3
+
+	testCases := []struct {
+		TestName string
+		lbCount  int
+		Input    graphclient.CreateLoadBalancerInput
+		errorMsg string
+	}{
+		{
+			TestName: "creates loadbalancers - under limit",
+			Input:    graphclient.CreateLoadBalancerInput{Name: name, ProviderID: prov.ID, OwnerID: gidx.MustNewID(ownerPrefix), LocationID: locationID},
+			lbCount:  2,
+		},
+		{
+			TestName: "fails to create loadbalancers - over limit",
+			Input:    graphclient.CreateLoadBalancerInput{Name: name, ProviderID: prov.ID, OwnerID: gidx.MustNewID(ownerPrefix), LocationID: locationID},
+			lbCount:  5,
+			errorMsg: "load balancer limit reached",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.TestName, func(t *testing.T) {
+			tt := tt
+			t.Parallel()
+			var err error
+
+			for i := 1; i < tt.lbCount; i++ {
+				_, err = graphTestClient().LoadBalancerCreate(ctx, tt.Input)
+				if err != nil {
+					return
+				}
+			}
+
+			if tt.errorMsg != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tt.errorMsg)
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestUpdate_loadBalancer(t *testing.T) {
+	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
+
+	// Permit request
+	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
+
+	lb := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
 	updateName := gofakeit.DomainName()
-	emptyName := ""
 
 	testCases := []struct {
 		TestName   string
+		ID         gidx.PrefixedID
 		Input      graphclient.UpdateLoadBalancerInput
 		ExpectedLB *ent.LoadBalancer
 		errorMsg   string
 	}{
 		{
 			TestName: "updates loadbalancer",
+			ID:       lb.ID,
 			Input:    graphclient.UpdateLoadBalancerInput{Name: &updateName},
 			ExpectedLB: &ent.LoadBalancer{
 				Name:       updateName,
@@ -170,14 +251,27 @@ func TestUpdate_loadBalancer(t *testing.T) {
 		},
 		{
 			TestName: "fails to update name to empty",
-			Input:    graphclient.UpdateLoadBalancerInput{Name: &emptyName},
+			ID:       lb.ID,
+			Input:    graphclient.UpdateLoadBalancerInput{Name: newString("")},
 			errorMsg: "value is less than the required length",
+		},
+		{
+			TestName: "fails to update loadbalancer that does not exist",
+			ID:       gidx.PrefixedID("loadbal-dne"),
+			Input:    graphclient.UpdateLoadBalancerInput{Name: newString("loadbal-dne")},
+			errorMsg: "load_balancer not found",
+		},
+		{
+			TestName: "fails with invalid gidx",
+			ID:       "test-invalid-id",
+			Input:    graphclient.UpdateLoadBalancerInput{Name: newString("loadbal-dne")},
+			errorMsg: "invalid id",
 		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.TestName, func(t *testing.T) {
-			resp, err := graphTestClient().LoadBalancerUpdate(ctx, lb.ID, tt.Input)
+			resp, err := graphTestClient().LoadBalancerUpdate(ctx, tt.ID, tt.Input)
 
 			if tt.errorMsg != "" {
 				require.Error(t, err)
@@ -200,11 +294,16 @@ func TestUpdate_loadBalancer(t *testing.T) {
 
 func TestDelete_loadBalancer(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	perms.On("DeleteAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	lb := (&LoadBalancerBuilder{}).MustNew(ctx)
+	lb := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
 
 	testCases := []struct {
 		TestName   string
@@ -226,6 +325,11 @@ func TestDelete_loadBalancer(t *testing.T) {
 			TestName: "fails to delete empty loadbalancer ID",
 			Input:    gidx.PrefixedID(""),
 			errorMsg: "load_balancer not found",
+		},
+		{
+			TestName: "fails with invalid gidx",
+			Input:    "test-invalid-id",
+			errorMsg: "invalid id",
 		},
 	}
 
@@ -253,11 +357,16 @@ func TestDelete_loadBalancer(t *testing.T) {
 
 func TestFullLoadBalancerLifecycle(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	perms.On("DeleteAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
 
 	// Permit request
 	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
-	prov := (&ProviderBuilder{}).MustNew(ctx)
+	prov := (&testutils.ProviderBuilder{}).MustNew(ctx)
 	ownerID := gidx.MustNewID(ownerPrefix)
 	locationID := gidx.MustNewID(locationPrefix)
 	name := gofakeit.DomainName()
@@ -283,7 +392,7 @@ func TestFullLoadBalancerLifecycle(t *testing.T) {
 	assert.Equal(t, ownerID, createdLB.Owner.ID)
 
 	createdPortResp, err := graphTestClient().LoadBalancerPortCreate(ctx, graphclient.CreateLoadBalancerPortInput{
-		Name:           gofakeit.DomainName(),
+		Name:           newString(gofakeit.DomainName()),
 		Number:         8080,
 		LoadBalancerID: createdLB.ID,
 	})

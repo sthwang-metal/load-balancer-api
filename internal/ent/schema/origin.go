@@ -10,7 +10,12 @@ import (
 
 	"go.infratographer.com/x/entx"
 	"go.infratographer.com/x/gidx"
+
+	"go.infratographer.com/load-balancer-api/internal/ent/schema/validations"
+	"go.infratographer.com/load-balancer-api/x/pubsubinfo"
 )
+
+var defaultOriginWeight int32 = 100
 
 // Origin holds the schema definition for the Origin entity.
 type Origin struct {
@@ -37,8 +42,14 @@ func (Origin) Fields() []ent.Field {
 			Annotations(
 				entgql.OrderField("name"),
 			),
+		field.Int32("weight").
+			Default(defaultOriginWeight).
+			Annotations(
+				entgql.OrderField("weight"),
+			),
 		field.String("target").
 			NotEmpty().
+			Validate(validations.IPAddress).
 			// Comment("origin address").
 			Annotations(
 				entgql.OrderField("target"),
@@ -88,6 +99,7 @@ func (Origin) Indexes() []ent.Index {
 func (Origin) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entx.GraphKeyDirective("id"),
+		pubsubinfo.EventsHookSubjectName("load-balancer-origin"),
 		entgql.Type("LoadBalancerOrigin"),
 		prefixIDDirective(OriginPrefix),
 		entgql.RelayConnection(),

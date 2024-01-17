@@ -62,6 +62,20 @@ func (pu *PortUpdate) SetName(s string) *PortUpdate {
 	return pu
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (pu *PortUpdate) SetNillableName(s *string) *PortUpdate {
+	if s != nil {
+		pu.SetName(*s)
+	}
+	return pu
+}
+
+// ClearName clears the value of the "name" field.
+func (pu *PortUpdate) ClearName() *PortUpdate {
+	pu.mutation.ClearName()
+	return pu
+}
+
 // AddPoolIDs adds the "pools" edge to the Pool entity by IDs.
 func (pu *PortUpdate) AddPoolIDs(ids ...gidx.PrefixedID) *PortUpdate {
 	pu.mutation.AddPoolIDs(ids...)
@@ -146,11 +160,6 @@ func (pu *PortUpdate) check() error {
 			return &ValidationError{Name: "number", err: fmt.Errorf(`generated: validator failed for field "Port.number": %w`, err)}
 		}
 	}
-	if v, ok := pu.mutation.Name(); ok {
-		if err := port.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`generated: validator failed for field "Port.name": %w`, err)}
-		}
-	}
 	if _, ok := pu.mutation.LoadBalancerID(); pu.mutation.LoadBalancerCleared() && !ok {
 		return errors.New(`generated: clearing a required unique edge "Port.load_balancer"`)
 	}
@@ -180,6 +189,9 @@ func (pu *PortUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if value, ok := pu.mutation.Name(); ok {
 		_spec.SetField(port.FieldName, field.TypeString, value)
+	}
+	if pu.mutation.NameCleared() {
+		_spec.ClearField(port.FieldName, field.TypeString)
 	}
 	if pu.mutation.PoolsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -262,6 +274,20 @@ func (puo *PortUpdateOne) AddNumber(i int) *PortUpdateOne {
 // SetName sets the "name" field.
 func (puo *PortUpdateOne) SetName(s string) *PortUpdateOne {
 	puo.mutation.SetName(s)
+	return puo
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (puo *PortUpdateOne) SetNillableName(s *string) *PortUpdateOne {
+	if s != nil {
+		puo.SetName(*s)
+	}
+	return puo
+}
+
+// ClearName clears the value of the "name" field.
+func (puo *PortUpdateOne) ClearName() *PortUpdateOne {
+	puo.mutation.ClearName()
 	return puo
 }
 
@@ -362,11 +388,6 @@ func (puo *PortUpdateOne) check() error {
 			return &ValidationError{Name: "number", err: fmt.Errorf(`generated: validator failed for field "Port.number": %w`, err)}
 		}
 	}
-	if v, ok := puo.mutation.Name(); ok {
-		if err := port.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`generated: validator failed for field "Port.name": %w`, err)}
-		}
-	}
 	if _, ok := puo.mutation.LoadBalancerID(); puo.mutation.LoadBalancerCleared() && !ok {
 		return errors.New(`generated: clearing a required unique edge "Port.load_balancer"`)
 	}
@@ -413,6 +434,9 @@ func (puo *PortUpdateOne) sqlSave(ctx context.Context) (_node *Port, err error) 
 	}
 	if value, ok := puo.mutation.Name(); ok {
 		_spec.SetField(port.FieldName, field.TypeString, value)
+	}
+	if puo.mutation.NameCleared() {
+		_spec.ClearField(port.FieldName, field.TypeString)
 	}
 	if puo.mutation.PoolsCleared() {
 		edge := &sqlgraph.EdgeSpec{

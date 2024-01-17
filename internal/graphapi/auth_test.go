@@ -6,16 +6,29 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.infratographer.com/permissions-api/pkg/permissions"
+	"go.infratographer.com/permissions-api/pkg/permissions/mockpermissions"
 	"go.infratographer.com/x/echojwtx"
 	"go.infratographer.com/x/testing/auth"
+
+	"go.infratographer.com/load-balancer-api/internal/testutils"
 )
 
 func TestJWTEnabledLoadbalancerGETWithAuthClient(t *testing.T) {
 	// oauthCLI, issuer, oAuthClose := echojwtx.("urn:test:loadbalancer", "")
 	oauthCLI, issuer, oAuthClose := auth.OAuthTestClient("urn:test:loadbalancer", "")
 	defer oAuthClose()
+
+	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
+
+	// Permit request
+	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
 
 	srv, err := newTestServer(
 		withAuthConfig(
@@ -33,8 +46,7 @@ func TestJWTEnabledLoadbalancerGETWithAuthClient(t *testing.T) {
 
 	defer srv.Close()
 
-	ctx := context.Background()
-	lb1 := (&LoadBalancerBuilder{}).MustNew(ctx)
+	lb1 := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
 
 	resp, err := graphTestClient(
 		withGraphClientHTTPClient(oauthCLI),
@@ -50,6 +62,15 @@ func TestJWTENabledLoadbalancerGETWithDefaultClient(t *testing.T) {
 	_, issuer, oAuthClose := auth.OAuthTestClient("urn:test:loadbalancer", "")
 	defer oAuthClose()
 
+	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
+
+	// Permit request
+	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
+
 	srv, err := newTestServer(
 		withAuthConfig(
 			&echojwtx.AuthConfig{
@@ -66,8 +87,7 @@ func TestJWTENabledLoadbalancerGETWithDefaultClient(t *testing.T) {
 
 	defer srv.Close()
 
-	ctx := context.Background()
-	lb1 := (&LoadBalancerBuilder{}).MustNew(ctx)
+	lb1 := (&testutils.LoadBalancerBuilder{}).MustNew(ctx)
 
 	resp, err := graphTestClient(
 		withGraphClientHTTPClient(http.DefaultClient),

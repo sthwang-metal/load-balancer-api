@@ -77,6 +77,14 @@ func (pc *PortCreate) SetName(s string) *PortCreate {
 	return pc
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (pc *PortCreate) SetNillableName(s *string) *PortCreate {
+	if s != nil {
+		pc.SetName(*s)
+	}
+	return pc
+}
+
 // SetLoadBalancerID sets the "load_balancer_id" field.
 func (pc *PortCreate) SetLoadBalancerID(gi gidx.PrefixedID) *PortCreate {
 	pc.mutation.SetLoadBalancerID(gi)
@@ -182,14 +190,6 @@ func (pc *PortCreate) check() error {
 			return &ValidationError{Name: "number", err: fmt.Errorf(`generated: validator failed for field "Port.number": %w`, err)}
 		}
 	}
-	if _, ok := pc.mutation.Name(); !ok {
-		return &ValidationError{Name: "name", err: errors.New(`generated: missing required field "Port.name"`)}
-	}
-	if v, ok := pc.mutation.Name(); ok {
-		if err := port.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`generated: validator failed for field "Port.name": %w`, err)}
-		}
-	}
 	if _, ok := pc.mutation.LoadBalancerID(); !ok {
 		return &ValidationError{Name: "load_balancer_id", err: errors.New(`generated: missing required field "Port.load_balancer_id"`)}
 	}
@@ -291,11 +291,15 @@ func (pc *PortCreate) createSpec() (*Port, *sqlgraph.CreateSpec) {
 // PortCreateBulk is the builder for creating many Port entities in bulk.
 type PortCreateBulk struct {
 	config
+	err      error
 	builders []*PortCreate
 }
 
 // Save creates the Port entities in the database.
 func (pcb *PortCreateBulk) Save(ctx context.Context) ([]*Port, error) {
+	if pcb.err != nil {
+		return nil, pcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(pcb.builders))
 	nodes := make([]*Port, len(pcb.builders))
 	mutators := make([]Mutator, len(pcb.builders))

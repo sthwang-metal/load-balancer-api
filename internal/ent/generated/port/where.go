@@ -270,6 +270,16 @@ func NameHasSuffix(v string) predicate.Port {
 	return predicate.Port(sql.FieldHasSuffix(FieldName, v))
 }
 
+// NameIsNil applies the IsNil predicate on the "name" field.
+func NameIsNil() predicate.Port {
+	return predicate.Port(sql.FieldIsNull(FieldName))
+}
+
+// NameNotNil applies the NotNil predicate on the "name" field.
+func NameNotNil() predicate.Port {
+	return predicate.Port(sql.FieldNotNull(FieldName))
+}
+
 // NameEqualFold applies the EqualFold predicate on the "name" field.
 func NameEqualFold(v string) predicate.Port {
 	return predicate.Port(sql.FieldEqualFold(FieldName, v))
@@ -398,32 +408,15 @@ func HasLoadBalancerWith(preds ...predicate.LoadBalancer) predicate.Port {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Port) predicate.Port {
-	return predicate.Port(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Port(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.Port) predicate.Port {
-	return predicate.Port(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Port(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.Port) predicate.Port {
-	return predicate.Port(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.Port(sql.NotPredicates(p))
 }

@@ -5,20 +5,32 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.infratographer.com/permissions-api/pkg/permissions"
+	"go.infratographer.com/permissions-api/pkg/permissions/mockpermissions"
 	"go.infratographer.com/x/gidx"
 
 	ent "go.infratographer.com/load-balancer-api/internal/ent/generated"
 	"go.infratographer.com/load-balancer-api/internal/graphclient"
+	"go.infratographer.com/load-balancer-api/internal/testutils"
 )
 
 func TestOwnerLoadBalancersResolver(t *testing.T) {
 	ctx := context.Background()
+	perms := new(mockpermissions.MockPermissions)
+	perms.On("CreateAuthRelationships", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	ctx = perms.ContextWithHandler(ctx)
+
+	// Permit request
+	ctx = context.WithValue(ctx, permissions.CheckerCtxKey, permissions.DefaultAllowChecker)
+
 	ownerID := gidx.MustNewID("testtnt")
-	lb1 := (&LoadBalancerBuilder{OwnerID: ownerID, LocationID: "testloc-CCCafdsaf", Name: "lb-a"}).MustNew(ctx)
-	lb2 := (&LoadBalancerBuilder{OwnerID: ownerID, LocationID: "testloc-AAAfasdf", Name: "lb-c"}).MustNew(ctx)
-	lb3 := (&LoadBalancerBuilder{OwnerID: ownerID, LocationID: "testloc-BBBasdfa", Name: "lb-1"}).MustNew(ctx)
-	(&LoadBalancerBuilder{}).MustNew(ctx)
+	lb1 := (&testutils.LoadBalancerBuilder{OwnerID: ownerID, LocationID: "testloc-CCCafdsaf", Name: "lb-a"}).MustNew(ctx)
+	lb2 := (&testutils.LoadBalancerBuilder{OwnerID: ownerID, LocationID: "testloc-AAAfasdf", Name: "lb-c"}).MustNew(ctx)
+	lb3 := (&testutils.LoadBalancerBuilder{OwnerID: ownerID, LocationID: "testloc-BBBasdfa", Name: "lb-1"}).MustNew(ctx)
+	(&testutils.LoadBalancerBuilder{}).MustNew(ctx)
 	// Update LB1 so it's updated at is most recent
 	lb1.Update().SaveX(ctx)
 
