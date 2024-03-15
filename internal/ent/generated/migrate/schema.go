@@ -34,7 +34,7 @@ var (
 		{Name: "name", Type: field.TypeString, Size: 2147483647},
 		{Name: "owner_id", Type: field.TypeString},
 		{Name: "location_id", Type: field.TypeString},
-		{Name: "provider_id", Type: field.TypeString},
+		{Name: "provider_id", Type: field.TypeString, Default: "loadpvd-gOB_-byp5ebFo7A3LHv2B"},
 	}
 	// LoadBalancersTable holds the schema information for the "load_balancers" table.
 	LoadBalancersTable = &schema.Table{

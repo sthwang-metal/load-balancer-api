@@ -117,8 +117,8 @@ var (
 	OwnerIDValidator func(string) error
 	// LocationIDValidator is a validator for the "location_id" field. It is called by the builders before save.
 	LocationIDValidator func(string) error
-	// ProviderIDValidator is a validator for the "provider_id" field. It is called by the builders before save.
-	ProviderIDValidator func(string) error
+	// DefaultProviderID holds the default value on creation for the "provider_id" field.
+	DefaultProviderID gidx.PrefixedID
 	// DefaultID holds the default value on creation for the "id" field.
 	DefaultID func() gidx.PrefixedID
 )

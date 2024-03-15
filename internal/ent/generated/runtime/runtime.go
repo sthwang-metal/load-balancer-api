@@ -67,8 +67,8 @@ func init() {
 	loadbalancer.LocationIDValidator = loadbalancerDescLocationID.Validators[0].(func(string) error)
 	// loadbalancerDescProviderID is the schema descriptor for provider_id field.
 	loadbalancerDescProviderID := loadbalancerFields[4].Descriptor()
-	// loadbalancer.ProviderIDValidator is a validator for the "provider_id" field. It is called by the builders before save.
-	loadbalancer.ProviderIDValidator = loadbalancerDescProviderID.Validators[0].(func(string) error)
+	// loadbalancer.DefaultProviderID holds the default value on creation for the provider_id field.
+	loadbalancer.DefaultProviderID = gidx.PrefixedID(loadbalancerDescProviderID.Default.(string))
 	// loadbalancerDescID is the schema descriptor for id field.
 	loadbalancerDescID := loadbalancerFields[0].Descriptor()
 	// loadbalancer.DefaultID holds the default value on creation for the id field.

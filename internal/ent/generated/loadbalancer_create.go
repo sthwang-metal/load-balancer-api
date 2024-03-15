@@ -145,6 +145,14 @@ func (lbc *LoadBalancerCreate) SetProviderID(gi gidx.PrefixedID) *LoadBalancerCr
 	return lbc
 }
 
+// SetNillableProviderID sets the "provider_id" field if the given value is not nil.
+func (lbc *LoadBalancerCreate) SetNillableProviderID(gi *gidx.PrefixedID) *LoadBalancerCreate {
+	if gi != nil {
+		lbc.SetProviderID(*gi)
+	}
+	return lbc
+}
+
 // SetID sets the "id" field.
 func (lbc *LoadBalancerCreate) SetID(gi gidx.PrefixedID) *LoadBalancerCreate {
 	lbc.mutation.SetID(gi)
@@ -230,6 +238,10 @@ func (lbc *LoadBalancerCreate) defaults() error {
 		v := loadbalancer.DefaultUpdatedAt()
 		lbc.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := lbc.mutation.ProviderID(); !ok {
+		v := loadbalancer.DefaultProviderID
+		lbc.mutation.SetProviderID(v)
+	}
 	if _, ok := lbc.mutation.ID(); !ok {
 		if loadbalancer.DefaultID == nil {
 			return fmt.Errorf("generated: uninitialized loadbalancer.DefaultID (forgotten import generated/runtime?)")
@@ -274,11 +286,6 @@ func (lbc *LoadBalancerCreate) check() error {
 	}
 	if _, ok := lbc.mutation.ProviderID(); !ok {
 		return &ValidationError{Name: "provider_id", err: errors.New(`generated: missing required field "LoadBalancer.provider_id"`)}
-	}
-	if v, ok := lbc.mutation.ProviderID(); ok {
-		if err := loadbalancer.ProviderIDValidator(string(v)); err != nil {
-			return &ValidationError{Name: "provider_id", err: fmt.Errorf(`generated: validator failed for field "LoadBalancer.provider_id": %w`, err)}
-		}
 	}
 	if _, ok := lbc.mutation.ProviderID(); !ok {
 		return &ValidationError{Name: "provider", err: errors.New(`generated: missing required edge "LoadBalancer.provider"`)}

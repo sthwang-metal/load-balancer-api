@@ -73,7 +73,7 @@ func (LoadBalancer) Fields() []ent.Field {
 		field.String("provider_id").
 			GoType(gidx.PrefixedID("")).
 			Immutable().
-			NotEmpty().
+			Default("loadpvd-gOB_-byp5ebFo7A3LHv2B").
 			Comment("The ID for the load balancer provider for this load balancer.").
 			Annotations(
 				entgql.Type("ID"),
